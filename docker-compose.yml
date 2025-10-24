@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: sysPay-postgres
+    environment:
+      POSTGRES_DB: sysPayDb
+      POSTGRES_USER: sysPay_user
+      POSTGRES_PASSWORD: sysPay_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - '5433:5432'
+    volumes:
+      - syspay_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U sysPay_user -d sysPayDb']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sysPay-api
+    ports:
+      - '5000:5000'
+    environment:
+      DATABASE_URL: postgresql://sysPay_user:sysPay_password@postgres:5432/sysPayDb
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: sysPayDb
+      DATABASE_USER: sysPay_user
+      DATABASE_PASSWORD: sysPay_password
+      BETTER_AUTH_URL: http://localhost:5000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  syspay_postgres_data:

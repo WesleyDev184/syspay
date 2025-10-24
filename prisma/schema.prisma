@@ -1,0 +1,184 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String    @id @default(uuid())
+  name                String
+  email               String    @unique
+  emailVerified       Boolean   @default(false)
+  image               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @default(now()) @updatedAt
+  role                String?
+  banned              Boolean?  @default(false)
+  banReason           String?
+  banExpires          DateTime?
+  document            String?   @unique
+  phoneNumber         String?   @unique
+  phoneNumberVerified Boolean?
+
+  sessions Session[]
+  accounts Account[]
+  charges  Charge[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  impersonatedBy String?
+
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(uuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(uuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  @@map("verification")
+}
+
+enum ChargeStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  PIX
+  CREDIT_CARD
+  BOLETO
+}
+
+enum Currency {
+  BRL
+  USD
+  EUR
+}
+
+model Charge {
+  id             String        @id @default(uuid())
+  amount         Decimal       @db.Decimal(10, 2)
+  currency       Currency      @default(BRL)
+  paymentMethod  PaymentMethod
+  status         ChargeStatus  @default(PENDING)
+  description    String?
+  idempotencyKey String?       @unique
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  pixData        PixPayment?
+  creditCardData CreditCardPayment?
+  boletoData     BoletoPayment?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  paidAt    DateTime?
+  expiresAt DateTime?
+
+  @@index([userId])
+  @@index([status])
+  @@index([idempotencyKey])
+  @@map("charge")
+}
+
+model PixPayment {
+  id       String @id @default(uuid())
+  chargeId String @unique
+  charge   Charge @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+
+  pixKey       String?
+  qrCode       String?
+  qrCodeBase64 String?  @db.Text
+  emvCode      String?  @db.Text
+  expiresAt    DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("pix_payment")
+}
+
+model CreditCardPayment {
+  id       String @id @default(uuid())
+  chargeId String @unique
+  charge   Charge @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+
+  cardHolderName    String
+  cardLastDigits    String
+  cardBrand         String
+  installments      Int     @default(1)
+  installmentAmount Decimal @db.Decimal(10, 2)
+
+  cardToken String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("credit_card_payment")
+}
+
+model BoletoPayment {
+  id       String @id @default(uuid())
+  chargeId String @unique
+  charge   Charge @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+
+  barcode       String?
+  digitableLine String?
+  boletoUrl     String?
+  dueDate       DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("boleto_payment")
+}
